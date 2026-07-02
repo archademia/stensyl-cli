@@ -1,35 +1,61 @@
-import prompts from "prompts";
 import pc from "picocolors";
+import ora, { type Ora } from "ora";
 import { apiCall } from "../api.js";
 import { saveConfig, loadConfig, clearConfig } from "../config.js";
+import { requestDeviceCode, pollForToken, openBrowser, type DeviceCodeResponse } from "../oauth.js";
 
+type AccountData = {
+  user_id: string;
+  plan_name: string | null;
+  status: string | null;
+  token_source: string;
+  credits: { available: number; monthly_grant: number };
+};
+
+// Browser-based sign-in (OAuth 2.0 Device Authorization Grant). No keys to
+// paste: the CLI prints a code, opens your browser, and waits for approval.
 export async function login(opts: { json?: boolean }): Promise<void> {
-  const response = await prompts({
-    type: "password",
-    name: "key",
-    message:
-      "Paste your Stensyl API key (create one at https://stensyl.ai/api#keys):",
-    validate: (val: string) =>
-      val.startsWith("stensyl_sk_") || "Key must start with stensyl_sk_",
-  });
-
-  if (!response.key) {
-    if (!opts.json) console.log(pc.yellow("Login cancelled."));
-    process.exit(1);
+  let device: DeviceCodeResponse;
+  try {
+    device = await requestDeviceCode();
+  } catch (e) {
+    return fail(opts, (e as Error).message);
   }
 
-  // Save first so apiCall can pick it up.
-  const existing = loadConfig();
-  saveConfig({ ...existing, api_key: response.key });
+  if (opts.json) {
+    // Machine mode: emit the verification details, then block on approval.
+    console.log(
+      JSON.stringify({
+        verification_uri: device.verification_uri,
+        verification_uri_complete: device.verification_uri_complete,
+        user_code: device.user_code,
+      })
+    );
+  } else {
+    console.log("");
+    console.log(`  Open ${pc.cyan(pc.underline(device.verification_uri))}`);
+    console.log(`  and enter the code:  ${pc.bold(pc.green(device.user_code))}`);
+    console.log("");
+    console.log(pc.dim("  Opening your browser…"));
+    openBrowser(device.verification_uri_complete);
+  }
 
-  // Verify by calling /api/v1/account.
+  const spinner: Ora | null = opts.json ? null : ora("Waiting for approval…").start();
   try {
-    const account = await apiCall<{ user_id: string; tier: string | null; plan_name: string | null; credits: { available: number; monthly_grant: number } }>("/api/v1/account");
+    await pollForToken(device);
+  } catch (e) {
+    spinner?.fail("Sign-in failed");
+    return fail(opts, (e as Error).message);
+  }
+
+  // Approved + tokens stored. Verify by calling /api/v1/account.
+  try {
+    const account = await apiCall<AccountData>("/api/v1/account");
     saveConfig({ ...loadConfig(), user_email: account.data.user_id });
+    spinner?.succeed("Signed in");
     if (opts.json) {
       console.log(JSON.stringify({ ok: true, account: account.data }));
     } else {
-      console.log(pc.green("✓ Signed in"));
       console.log(`  Plan: ${pc.bold(account.data.plan_name ?? "No Plan")}`);
       console.log(
         `  Credits: ${pc.bold(account.data.credits.available.toLocaleString())} / ${account.data.credits.monthly_grant.toLocaleString()}`
@@ -37,14 +63,18 @@ export async function login(opts: { json?: boolean }): Promise<void> {
     }
   } catch (e) {
     clearConfig();
-    if (opts.json) {
-      console.log(JSON.stringify({ ok: false, error: (e as Error).message }));
-    } else {
-      console.log(pc.red(`✗ Verification failed: ${(e as Error).message}`));
-      console.log(pc.dim("  Key was not saved."));
-    }
-    process.exit(1);
+    spinner?.fail("Verification failed");
+    return fail(opts, (e as Error).message);
   }
+}
+
+function fail(opts: { json?: boolean }, message: string): void {
+  if (opts.json) {
+    console.log(JSON.stringify({ ok: false, error: message }));
+  } else {
+    console.log(pc.red(`✗ ${message}`));
+  }
+  process.exit(1);
 }
 
 export async function logout(opts: { json?: boolean }): Promise<void> {
@@ -53,21 +83,13 @@ export async function logout(opts: { json?: boolean }): Promise<void> {
     console.log(JSON.stringify({ ok: true }));
   } else {
     console.log(pc.green("✓ Signed out. Local credentials cleared."));
-    console.log(pc.dim("  Revoke the key from https://stensyl.ai/api#keys to prevent further use."));
+    console.log(pc.dim("  This device's access has been removed locally."));
   }
 }
 
 export async function whoami(opts: { json?: boolean }): Promise<void> {
   try {
-    const account = await apiCall<{
-      user_id: string;
-      tier: string | null;
-      plan_name: string | null;
-      status: string | null;
-      credits: { available: number; monthly_grant: number };
-      token_source: string;
-    }>("/api/v1/account");
-
+    const account = await apiCall<AccountData>("/api/v1/account");
     if (opts.json) {
       console.log(JSON.stringify(account.data, null, 2));
     } else {

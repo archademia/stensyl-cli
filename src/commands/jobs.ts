@@ -1,4 +1,4 @@
-import ora from "ora";
+import ora, { type Ora } from "ora";
 import pc from "picocolors";
 import { apiCall } from "../api.js";
 
@@ -8,8 +8,6 @@ type Job = {
   output_url: string | null;
   error: string | null;
   credits_used: number;
-  eta_seconds: number | null;
-  generation_time_ms: number | null;
 };
 
 export async function status(jobId: string, opts: { json?: boolean }): Promise<void> {
@@ -26,13 +24,12 @@ export async function status(jobId: string, opts: { json?: boolean }): Promise<v
 }
 
 export async function wait(jobId: string, opts: { json?: boolean }): Promise<void> {
-  const spinner = !opts.json ? ora(`Waiting on ${jobId}…`).start() : null;
+  const spinner: Ora | null = !opts.json ? ora(`Waiting on ${jobId}…`).start() : null;
   const startedAt = Date.now();
   while (true) {
     const r = await apiCall<Job>(`/api/v1/jobs/${jobId}`);
     const elapsed = Math.floor((Date.now() - startedAt) / 1000);
     if (spinner) spinner.text = `Waiting on ${jobId} — ${elapsed}s elapsed (${r.data.state})`;
-
     if (r.data.state === "completed") {
       spinner?.succeed(`Completed: ${pc.bold(r.data.output_url ?? "(no output url)")}`);
       if (opts.json) console.log(JSON.stringify(r.data, null, 2));

@@ -1,16 +1,17 @@
 #!/usr/bin/env node
 // @stensyl/cli — Stensyl from your terminal.
 //
-// Auth: paste an API key from https://stensyl.ai/api#keys.
+// Auth: browser sign-in via `stensyl auth login` (OAuth device flow).
 // Storage: ~/.stensyl/config.json (chmod 600 on Unix).
 // Override: STENSYL_API_KEY env var (useful for CI).
 
 import { Command } from "commander";
 import pc from "picocolors";
 import { login, logout, whoami } from "./commands/auth.js";
-import { generate } from "./commands/generate.js";
+import { generate, type GenerateKind } from "./commands/generate.js";
 import { status as jobStatus, wait as jobWait } from "./commands/jobs.js";
-import { listModels, showAccount, showUsage, listWorkflows } from "./commands/info.js";
+import { listModels, showAccount, showUsage, listWorkflows, listAssets } from "./commands/info.js";
+import { listElements, createElement } from "./commands/elements.js";
 import { CliApiError } from "./api.js";
 
 const program = new Command();
@@ -18,13 +19,13 @@ const program = new Command();
 program
   .name("stensyl")
   .description("Stensyl from your terminal — generate images, video, and audio via the Stensyl API.")
-  .version("0.1.0");
+  .version("0.3.0");
 
 // ── Auth ─────────────────────────────────────────────────────
 const auth = program.command("auth").description("Authenticate with Stensyl");
 auth
   .command("login")
-  .description("Sign in with an API key (create one at https://stensyl.ai/api#keys)")
+  .description("Sign in with your Stensyl account (opens your browser)")
   .option("--json", "Output JSON")
   .action(async (opts) => {
     await login(opts);
@@ -45,7 +46,7 @@ auth
   });
 
 // ── Generation ──────────────────────────────────────────────
-function addGenCommands(kind: "image" | "video" | "audio" | "3d" | "text") {
+function addGenCommands(kind: GenerateKind) {
   const cmd = program
     .command(`${kind} <prompt>`)
     .description(`Generate ${kind === "3d" ? "a 3D model" : kind}`)
@@ -88,14 +89,14 @@ jobs
   .command("status <jobId>")
   .description("Get the current state of a job")
   .option("--json", "Output JSON")
-  .action(async (jobId, opts) => {
+  .action(async (jobId: string, opts) => {
     await jobStatus(jobId, opts);
   });
 jobs
   .command("wait <jobId>")
   .description("Long-poll a job until completion")
   .option("--json", "Output JSON")
-  .action(async (jobId, opts) => {
+  .action(async (jobId: string, opts) => {
     await jobWait(jobId, opts);
   });
 
@@ -108,7 +109,6 @@ program
   .action(async (opts) => {
     await listModels(opts);
   });
-
 program
   .command("account")
   .description("Show plan, credits, and spend caps")
@@ -116,7 +116,6 @@ program
   .action(async (opts) => {
     await showAccount(opts);
   });
-
 program
   .command("usage")
   .description("Show recent API requests and credit spend")
@@ -125,13 +124,43 @@ program
   .action(async (opts) => {
     await showUsage(opts);
   });
-
 program
   .command("workflows")
   .description("List your saved workflows")
   .option("--json", "Output JSON")
   .action(async (opts) => {
     await listWorkflows(opts);
+  });
+
+// ── Library ─────────────────────────────────────────────────
+program
+  .command("assets")
+  .description("Browse your media libraries — uploads, generations, and elements")
+  .option("--source <source>", "Filter: uploads | generations | elements | all (default all)")
+  .option("--kind <kind>", "Filter: image | video | audio | 3d")
+  .option("--limit <n>", "Max items (1-50, default 15)")
+  .option("--json", "Output JSON")
+  .action(async (opts) => {
+    await listAssets(opts);
+  });
+program
+  .command("elements")
+  .description("List your Film Studio Cast / Sets / Props library")
+  .option("--limit <n>", "Max items (1-50, default 50)")
+  .option("--json", "Output JSON")
+  .action(async (opts) => {
+    await listElements(opts);
+  });
+program
+  .command("element <type> <name>")
+  .description("Create a Film Studio element (character | set | prop) and save it to your library")
+  .requiredOption("--desc <description>", "Plain subject description — who/what, features, wardrobe/materials")
+  .option("--ref <url>", "Reference image URL to base the element on")
+  .option("--refs <urls...>", "Multiple reference image URLs (up to 6)")
+  .option("--out <path>", "Also save the reference sheet PNG to a file")
+  .option("--json", "Output JSON")
+  .action(async (type: string, name: string, opts) => {
+    await createElement(type, name, opts);
   });
 
 // ── Error handling ──────────────────────────────────────────
@@ -149,17 +178,18 @@ program.exitOverride();
       }
       process.exit(1);
     }
-    if ((e as { code?: string }).code === "commander.help" || (e as { code?: string }).code === "commander.helpDisplayed") {
+    const err = e as { code?: string; message?: string };
+    if (err.code === "commander.help" || err.code === "commander.helpDisplayed") {
       process.exit(0);
     }
-    if ((e as { code?: string }).code === "commander.version") {
+    if (err.code === "commander.version") {
       process.exit(0);
     }
-    if ((e as { code?: string }).code === "commander.unknownCommand" || (e as { code?: string }).code === "commander.missingArgument") {
+    if (err.code === "commander.unknownCommand" || err.code === "commander.missingArgument" || err.code === "commander.missingMandatoryOptionValue") {
       // commander has already printed the error
       process.exit(1);
     }
-    console.error(pc.red(`✗ ${(e as Error).message}`));
+    console.error(pc.red(`✗ ${err.message}`));
     process.exit(1);
   }
 })();

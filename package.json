@@ -1,11 +1,11 @@
 {
-  "name": "@stensyl/cli",
-  "version": "0.1.0",
+  "name": "@stensyl_ai/cli",
+  "version": "0.3.0",
   "description": "Stensyl from your terminal. Generate images, video, audio via the Stensyl API.",
   "bin": {
-    "stensyl": "./dist/index.js"
+    "stensyl": "dist/index.js"
   },
-  "main": "./dist/index.js",
+  "main": "dist/index.js",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -43,7 +43,7 @@
   "license": "UNLICENSED",
   "repository": {
     "type": "git",
-    "url": "https://github.com/stensyl/cli"
+    "url": "https://github.com/archademia/stensyl-cli"
   },
   "homepage": "https://stensyl.ai"
 }
