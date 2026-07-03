@@ -12,6 +12,7 @@ import { generate, type GenerateKind } from "./commands/generate.js";
 import { status as jobStatus, wait as jobWait } from "./commands/jobs.js";
 import { listModels, showAccount, showUsage, listWorkflows, listAssets } from "./commands/info.js";
 import { listElements, createElement } from "./commands/elements.js";
+import { configSet, configGet, configUnset } from "./commands/config.js";
 import { CliApiError } from "./api.js";
 
 const program = new Command();
@@ -162,6 +163,32 @@ program
   .option("--json", "Output JSON")
   .action(async (type: string, name: string, opts) => {
     await createElement(type, name, opts);
+  });
+
+// ── Config ──────────────────────────────────────────────────
+const config = program
+  .command("config")
+  .description("View or set CLI defaults (output dir, per-kind default model)");
+config
+  .command("set <key> <value>")
+  .description("Set a default, e.g. config set output_dir ~/stensyl-out")
+  .option("--json", "Output JSON")
+  .action(async (key: string, value: string, opts) => {
+    await configSet(key, value, opts);
+  });
+config
+  .command("get [key]")
+  .description("Show all defaults, or one key")
+  .option("--json", "Output JSON")
+  .action(async (key: string | undefined, opts) => {
+    await configGet(key, opts);
+  });
+config
+  .command("unset <key>")
+  .description("Clear a default")
+  .option("--json", "Output JSON")
+  .action(async (key: string, opts) => {
+    await configUnset(key, opts);
   });
 
 // ── Error handling ──────────────────────────────────────────

@@ -3,6 +3,7 @@ import { join, extname } from "node:path";
 import ora, { type Ora } from "ora";
 import pc from "picocolors";
 import { apiCall, downloadToFile } from "../api.js";
+import { configuredModel, configuredOutputDir } from "./config.js";
 
 export type GenerateKind = "image" | "video" | "audio" | "3d" | "text";
 
@@ -81,7 +82,8 @@ async function resolveElementRefs(names: string[]): Promise<string[]> {
 }
 
 export async function generate(kind: GenerateKind, prompt: string, opts: GenerateOptions): Promise<void> {
-  const modelId = opts.model ?? DEFAULT_MODELS[kind];
+  // Model precedence: --model flag → configured default (config set default_model_<kind>) → built-in.
+  const modelId = opts.model ?? configuredModel(kind) ?? DEFAULT_MODELS[kind];
 
   const body: Record<string, unknown> = {
     model_id: modelId,
@@ -196,9 +198,9 @@ async function handleCompletion(
     process.exit(1);
   }
 
-  // Save to disk.
+  // Save to disk. Output dir precedence: --out path → configured output_dir → cwd.
   const ext = EXT_BY_KIND[kind] ?? extname(result.output_url) ?? "";
-  const outPath = opts.out ?? join(process.cwd(), `${result.job_id}${ext}`);
+  const outPath = opts.out ?? join(configuredOutputDir() ?? process.cwd(), `${result.job_id}${ext}`);
 
   if (kind === "text") {
     // Text outputs may not be file URLs — handle inline.

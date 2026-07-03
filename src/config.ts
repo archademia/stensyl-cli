@@ -17,7 +17,27 @@ export type Config = {
   access_expires_at?: number;
   api_url?: string;
   user_email?: string;
+  // ── User defaults (set via `stensyl config set …`) ──
+  // Where generated files land (default: current working directory).
+  output_dir?: string;
+  // Per-kind default model, overrides the built-in default when --model is omitted.
+  default_model_image?: string;
+  default_model_video?: string;
+  default_model_audio?: string;
+  default_model_3d?: string;
+  default_model_text?: string;
 };
+
+// Keys a user may set via `stensyl config set`. Excludes credentials.
+export const SETTABLE_KEYS = [
+  "output_dir",
+  "default_model_image",
+  "default_model_video",
+  "default_model_audio",
+  "default_model_3d",
+  "default_model_text",
+  "api_url",
+] as const;
 
 export type TokenPair = {
   access_token: string;
