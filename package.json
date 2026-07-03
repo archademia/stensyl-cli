@@ -1,6 +1,6 @@
 {
   "name": "@stensyl_ai/cli",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Stensyl from your terminal. Generate images, video, audio via the Stensyl API.",
   "bin": {
     "stensyl": "dist/index.js"

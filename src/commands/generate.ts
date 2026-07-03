@@ -13,6 +13,7 @@ type GenerateOptions = {
   duration?: string;
   ref?: string;
   refs?: string[];
+  element?: string[];
   endFrame?: string;
   voiceControl?: boolean;
   voiceRef?: string;
@@ -55,6 +56,30 @@ const EXT_BY_KIND: Record<string, string> = {
   text: ".txt",
 };
 
+// Resolve --element names (e.g. "Kelly") to their library image URLs, so a user
+// never has to paste raw asset URLs. Case-insensitive match against the user's
+// Cast / Sets / Props. Throws with the available names if one isn't found.
+async function resolveElementRefs(names: string[]): Promise<string[]> {
+  const r = await apiCall<{ elements: { name: string; image_url: string }[] }>(
+    "/api/v1/elements?limit=50"
+  );
+  const lib = r.data.elements ?? [];
+  const urls: string[] = [];
+  const missing: string[] = [];
+  for (const wanted of names) {
+    const hit = lib.find((e) => e.name.toLowerCase() === wanted.toLowerCase());
+    if (hit) urls.push(hit.image_url);
+    else missing.push(wanted);
+  }
+  if (missing.length > 0) {
+    const available = lib.map((e) => `"${e.name}"`).join(", ") || "(your library is empty)";
+    throw new Error(
+      `Element${missing.length > 1 ? "s" : ""} not found: ${missing.map((m) => `"${m}"`).join(", ")}.\n  Your library: ${available}\n  (Run: stensyl elements)`
+    );
+  }
+  return urls;
+}
+
 export async function generate(kind: GenerateKind, prompt: string, opts: GenerateOptions): Promise<void> {
   const modelId = opts.model ?? DEFAULT_MODELS[kind];
 
@@ -65,8 +90,18 @@ export async function generate(kind: GenerateKind, prompt: string, opts: Generat
   if (opts.resolution) body.resolution = opts.resolution;
   if (opts.aspectRatio) body.aspect_ratio = opts.aspectRatio;
   if (opts.duration) body.duration_seconds = Number(opts.duration);
-  if (opts.ref) body.reference_image_url = opts.ref;
-  if (opts.refs && opts.refs.length > 0) body.reference_image_urls = opts.refs;
+
+  // References: combine raw URLs (--ref / --refs) with library elements resolved
+  // by name (--element "Kelly"). Sets BOTH reference_image_url (first) and the
+  // plural array so single- and multi-ref backends both receive them.
+  const refUrls: string[] = [...(opts.ref ? [opts.ref] : []), ...(opts.refs ?? [])];
+  if (opts.element && opts.element.length > 0) {
+    refUrls.push(...(await resolveElementRefs(opts.element)));
+  }
+  if (refUrls.length > 0) {
+    body.reference_image_url = refUrls[0];
+    body.reference_image_urls = refUrls;
+  }
   if (opts.endFrame) body.end_frame_url = opts.endFrame;
   if (opts.ttsVariant) body.tts_variant = opts.ttsVariant;
   if (opts.voiceControl) body.voice_control = true;

@@ -19,7 +19,7 @@ const program = new Command();
 program
   .name("stensyl")
   .description("Stensyl from your terminal — generate images, video, and audio via the Stensyl API.")
-  .version("0.3.0");
+  .version("0.4.0");
 
 // ── Auth ─────────────────────────────────────────────────────
 const auth = program.command("auth").description("Authenticate with Stensyl");
@@ -55,6 +55,7 @@ function addGenCommands(kind: GenerateKind) {
     .option("--aspect-ratio <ratio>", "e.g. 16:9, 1:1, 9:16")
     .option("--ref <url>", "Reference image URL")
     .option("--refs <urls...>", "Multiple reference image URLs")
+    .option("--element <names...>", "Reference Cast/Sets/Props BY NAME from your library (e.g. --element \"Kelly\" \"Yorkie\")")
     .option("--out <path>", "Output file path (default: ./<job_id>.<ext>)")
     .option("--json", "Output JSON")
     .option("--no-wait", "Return immediately with job_id (don't poll)");
